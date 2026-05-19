@@ -202,6 +202,18 @@ public:
     void setPopupMenuEnabled(bool on);
     bool isPopupMenuEnabled() const;
 
+    /** @name Navigation restrictions (AIMBI addition)
+     * Control which navigation actions are allowed
+     */
+    //@{
+    void setRotationDisabled(bool disable);
+    bool isRotationDisabled() const;
+    void setPanningDisabled(bool disable);
+    bool isPanningDisabled() const;
+    void setZoomingDisabled(bool disable);
+    bool isZoomingDisabled() const;
+    //@}
+
     void setFeedbackVisibility(bool enable);
     bool isFeedbackVisible() const;
 
@@ -609,6 +621,11 @@ private:
     unsigned long previousAxisLetterColor = 0;
     bool vboEnabled;
     bool naviCubeEnabled;
+
+    // AIMBI: Navigation restriction flags
+    bool rotationDisabled;
+    bool panningDisabled;
+    bool zoomingDisabled;
 
     Base::Color m_xColor;
     Base::Color m_yColor;

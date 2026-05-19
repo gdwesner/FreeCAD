@@ -187,6 +187,38 @@ void View3DInventorViewerPy::init_type()
         "getNavigationStyle() -> NavigationStyle\n"
         "Returns the current viewer navigation style class.\n"
     );
+
+    // AIMBI: Navigation restriction methods
+    add_varargs_method(
+        "setRotationDisabled",
+        &View3DInventorViewerPy::setRotationDisabled,
+        "setRotationDisabled(bool): disables or enables rotation navigation."
+    );
+    add_varargs_method(
+        "isRotationDisabled",
+        &View3DInventorViewerPy::isRotationDisabled,
+        "isRotationDisabled() -> bool: check whether rotation is disabled."
+    );
+    add_varargs_method(
+        "setPanningDisabled",
+        &View3DInventorViewerPy::setPanningDisabled,
+        "setPanningDisabled(bool): disables or enables panning navigation."
+    );
+    add_varargs_method(
+        "isPanningDisabled",
+        &View3DInventorViewerPy::isPanningDisabled,
+        "isPanningDisabled() -> bool: check whether panning is disabled."
+    );
+    add_varargs_method(
+        "setZoomingDisabled",
+        &View3DInventorViewerPy::setZoomingDisabled,
+        "setZoomingDisabled(bool): disables or enables zooming navigation."
+    );
+    add_varargs_method(
+        "isZoomingDisabled",
+        &View3DInventorViewerPy::isZoomingDisabled,
+        "isZoomingDisabled() -> bool: check whether zooming is disabled."
+    );
 }
 
 View3DInventorViewerPy::View3DInventorViewerPy(View3DInventorViewer* vi)
@@ -750,4 +782,59 @@ Py::Object View3DInventorViewerPy::getNavigationStyle(const Py::Tuple& args)
         return Py::asObject(navigationStyle->getPyObject());
     }
     return Py::None();
+}
+
+// AIMBI: Navigation restriction methods
+Py::Object View3DInventorViewerPy::setRotationDisabled(const Py::Tuple& args)
+{
+    int disable;
+    if (!PyArg_ParseTuple(args.ptr(), "i", &disable)) {
+        throw Py::Exception();
+    }
+    _viewer->setRotationDisabled(disable != 0);
+    return Py::None();
+}
+
+Py::Object View3DInventorViewerPy::isRotationDisabled(const Py::Tuple& args)
+{
+    if (!PyArg_ParseTuple(args.ptr(), "")) {
+        throw Py::Exception();
+    }
+    return Py::Boolean(_viewer->isRotationDisabled());
+}
+
+Py::Object View3DInventorViewerPy::setPanningDisabled(const Py::Tuple& args)
+{
+    int disable;
+    if (!PyArg_ParseTuple(args.ptr(), "i", &disable)) {
+        throw Py::Exception();
+    }
+    _viewer->setPanningDisabled(disable != 0);
+    return Py::None();
+}
+
+Py::Object View3DInventorViewerPy::isPanningDisabled(const Py::Tuple& args)
+{
+    if (!PyArg_ParseTuple(args.ptr(), "")) {
+        throw Py::Exception();
+    }
+    return Py::Boolean(_viewer->isPanningDisabled());
+}
+
+Py::Object View3DInventorViewerPy::setZoomingDisabled(const Py::Tuple& args)
+{
+    int disable;
+    if (!PyArg_ParseTuple(args.ptr(), "i", &disable)) {
+        throw Py::Exception();
+    }
+    _viewer->setZoomingDisabled(disable != 0);
+    return Py::None();
+}
+
+Py::Object View3DInventorViewerPy::isZoomingDisabled(const Py::Tuple& args)
+{
+    if (!PyArg_ParseTuple(args.ptr(), "")) {
+        throw Py::Exception();
+    }
+    return Py::Boolean(_viewer->isZoomingDisabled());
 }

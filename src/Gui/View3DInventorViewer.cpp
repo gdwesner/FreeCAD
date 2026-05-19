@@ -458,6 +458,11 @@ void View3DInventorViewer::init()
     fpsEnabled = false;
     vboEnabled = false;
 
+    // AIMBI: Initialize navigation restriction flags
+    rotationDisabled = false;
+    panningDisabled = false;
+    zoomingDisabled = false;
+
     attachSelection();
 
     // Coin should not clear the pixel-buffer, so the background image
@@ -3953,6 +3958,37 @@ void View3DInventorViewer::setPopupMenuEnabled(bool on)
 bool View3DInventorViewer::isPopupMenuEnabled() const
 {
     return navigation->isPopupMenuEnabled();
+}
+
+// AIMBI: Navigation restriction methods
+void View3DInventorViewer::setRotationDisabled(bool disable)
+{
+    rotationDisabled = disable;
+}
+
+bool View3DInventorViewer::isRotationDisabled() const
+{
+    return rotationDisabled;
+}
+
+void View3DInventorViewer::setPanningDisabled(bool disable)
+{
+    panningDisabled = disable;
+}
+
+bool View3DInventorViewer::isPanningDisabled() const
+{
+    return panningDisabled;
+}
+
+void View3DInventorViewer::setZoomingDisabled(bool disable)
+{
+    zoomingDisabled = disable;
+}
+
+bool View3DInventorViewer::isZoomingDisabled() const
+{
+    return zoomingDisabled;
 }
 
 /*!

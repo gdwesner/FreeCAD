@@ -1026,6 +1026,11 @@ void NavigationStyle::doScale(SoCamera* cam, float factor)
 }
 void NavigationStyle::doRotate(SoCamera* camera, float angle, const SbVec2f& pos)
 {
+    // AIMBI: Check if rotation is disabled
+    if (viewer->isRotationDisabled()) {
+        return;
+    }
+
     SbBool zoomAtCur = this->zoomAtCursor;
     if (zoomAtCur) {
         const SbViewportRegion& vp = viewer->getSoRenderManager()->getViewportRegion();
@@ -1102,9 +1107,15 @@ SbVec3f NavigationStyle::getFocalPoint() const
  */
 void NavigationStyle::spin(const SbVec2f& pointerpos)
 {
+    // AIMBI: Check if rotation is disabled
+    if (viewer->isRotationDisabled()) {
+        return;
+    }
+
     if (this->log.historysize < 2) {
         return;
     }
+
     assert(this->spinprojector);
 
     const SbViewportRegion& vp = viewer->getSoRenderManager()->getViewportRegion();
