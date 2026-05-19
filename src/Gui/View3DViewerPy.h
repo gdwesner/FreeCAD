@@ -84,6 +84,14 @@ public:
 
     Py::Object getNavigationStyle(const Py::Tuple&);
 
+    // AIMBI: Navigation restriction methods
+    Py::Object setRotationDisabled(const Py::Tuple&);
+    Py::Object isRotationDisabled(const Py::Tuple&);
+    Py::Object setPanningDisabled(const Py::Tuple&);
+    Py::Object isPanningDisabled(const Py::Tuple&);
+    Py::Object setZoomingDisabled(const Py::Tuple&);
+    Py::Object isZoomingDisabled(const Py::Tuple&);
+
 private:
     using method_varargs_handler = PyObject* (*)(PyObject * _self, PyObject* _args);
     static method_varargs_handler pycxx_handler;
