@@ -3,6 +3,14 @@
 This document tracks all modifications made to FreeCAD's source code for AIMBI.
 These changes should be applied to a fresh FreeCAD clone before building.
 
+**Current base**: FreeCAD 1.1.3 (tag `1.1.3`, released 2026-07-25). The `aimbi`
+branch is the release tag plus the commits below. Rebased from the 1.0-era base
+on 2026-07-30 with no conflicts (upstream still has not implemented the
+rotation-lock feature; the `DisallowRotation` enum flags remain unwired in
+1.1.3). The pre-rebase state is preserved in branch `aimbi-1.0-backup`.
+Note: the 1.1.3 tag was fetched shallow (`--depth 1`); run
+`git fetch upstream --unshallow` if full upstream history is needed.
+
 ## Change Log
 
 ### 1. View Rotation Lock (2024-XX-XX)
