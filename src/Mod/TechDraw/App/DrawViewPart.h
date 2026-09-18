@@ -135,6 +135,23 @@ public:
 
     App::PropertyInteger ScrubCount;
 
+    // AIMBI: clip box in the view's own frame (AIMBI_CHANGES.md #2).
+    // Width runs along XDirection, Height along the view's up axis and
+    // Depth along Direction; a zero extent is unbounded. When enabled the
+    // view is centred on ClipCenter instead of the shape's centroid, so the
+    // box stays put on the page while the model behind it moves.
+    App::PropertyBool ClipEnabled;
+    App::PropertyVector ClipCenter;
+    App::PropertyLength ClipWidth;
+    App::PropertyLength ClipHeight;
+    App::PropertyLength ClipDepth;
+    App::PropertyBool ShowClipFrame;
+
+    //! true when clipping is on and at least one extent is bounded
+    bool isClipped() const;
+    //! the part of shape inside the clip box (shape itself when not clipped)
+    TopoDS_Shape clipShape(const TopoDS_Shape& shape) const;
+
     short mustExecute() const override;
     App::DocumentObjectExecReturn* execute() override;
     const char* getViewProviderName() const override { return "TechDrawGui::ViewProviderViewPart"; }

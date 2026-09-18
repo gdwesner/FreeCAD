@@ -112,6 +112,76 @@ wires them up properly with simple boolean flags (matching the pattern used for
 
 ---
 
+### 2. View Clip Box (2026-09-17)
+
+**Purpose**: Let a TechDraw part view draw only what lies inside a box, so
+an elevation of a house on a site with outbuildings shows the house, a
+section renders a chosen depth, and a long building stitches into pieces
+with match lines. The outline is visible on the page while the box is
+adjusted and never exported. Applies to every `DrawViewPart` subclass
+(plans, elevations, sections, details, broken views).
+
+**Properties added to `TechDraw::DrawViewPart` (group "Clip")**:
+
+| Property        | Type            | Meaning                                                    |
+|-----------------|-----------------|------------------------------------------------------------|
+| `ClipEnabled`   | PropertyBool    | clip on/off                                                |
+| `ClipCenter`    | PropertyVector  | box centre in model space; the view is centred on it       |
+| `ClipWidth`     | PropertyLength  | extent along `XDirection` (0 = unbounded)                  |
+| `ClipHeight`    | PropertyLength  | extent along the view's up axis, `Direction x XDirection`  |
+| `ClipDepth`     | PropertyLength  | extent along `Direction`, centred on the box (0 = unbounded)|
+| `ShowClipFrame` | PropertyBool    | draw the dashed outline on the page (never exported)       |
+
+**Files Modified**:
+
+#### src/Mod/TechDraw/App/DrawViewPart.h / .cpp
+- The six properties above; `isClipped()`; `clipShape(shape)`.
+- `getSourceShape()` returns `clipShape(...)` of the extracted shapes, so
+  every consumer (execute, broken views, details, a section's base) is
+  clipped. `clipShape` builds a `BRepPrimAPI_MakeBox` on the projection
+  CS (`gp_Ax2(corner, Direction, XDirection)`), classifies each top-level
+  piece of the source compound by its bounding box (inside: kept as is;
+  outside: dropped; crossing: `FCBRepAlgoAPI_Common` with the box, kept
+  uncut if the boolean fails) and returns a compound, or a null shape
+  when nothing survives.
+- `makeGeometryForShape()` uses `ClipCenter` as `m_saveCentroid` while
+  clipped, so the view stays anchored on the box, not on whatever
+  happens to be inside it.
+- `mustExecute()` includes the clip properties; `onChanged()` requests a
+  repaint when `ShowClipFrame` changes.
+
+#### src/Mod/TechDraw/App/DrawViewSection.cpp
+- `getShapeToCut()` returns `clipShape(shapeToCut)`: a section clips
+  what it cuts with its own box (a cut plan over a hidden base included).
+- `prepareShape()` anchors on `ClipCenter` while clipped.
+
+#### src/Mod/TechDraw/Gui/QGIViewPart.h / .cpp
+- `m_clipFrame` (`QGCustomRect`, dashed teal cosmetic pen) created in the
+  constructor; `drawClipFrame()` called from `draw()` sizes it to
+  `ClipWidth/ClipHeight * Scale` around the view origin (an unbounded
+  extent follows the drawn geometry) and hides it when not clipped, when
+  `ShowClipFrame` is false, or while exporting (`isExporting()`, like the
+  view frame). It is a plain rect item, so `removePrimitives()` and
+  `removeDecorations()` leave it alone.
+
+**Python API** (properties are ordinary FreeCAD properties):
+```python
+view.ClipEnabled = True
+view.ClipCenter = FreeCAD.Vector(2000, 3000, 1500)
+view.ClipWidth, view.ClipHeight, view.ClipDepth = 4200, 0, 0   # 0 = unbounded
+view.ShowClipFrame = False        # hide the outline
+```
+AIMBI wraps it in `aimbi.freecad.view_clip` (logged setters, fit to
+components, split views with match lines, sync and rebuild).
+
+**Notes**: the frame ignores the view's `Rotation`; a `DrawViewDetail`
+inherits its base's clip but does not apply its own (its shape comes
+from `getShapeForDetail()` on the base). Cosmetic edges removed after a
+recompute stay in the drawn geometry until the next one - TechDraw
+behaviour, not new.
+
+---
+
 ## Applying Changes
 
 To apply these changes to a fresh FreeCAD clone:
@@ -127,6 +197,12 @@ cp /path/to/AIMBI/reference/FreeCAD/src/Gui/View3DInventorViewer.cpp src/Gui/
 cp /path/to/AIMBI/reference/FreeCAD/src/Gui/Navigation/NavigationStyle.cpp src/Gui/Navigation/
 cp /path/to/AIMBI/reference/FreeCAD/src/Gui/View3DViewerPy.h src/Gui/
 cp /path/to/AIMBI/reference/FreeCAD/src/Gui/View3DViewerPy.cpp src/Gui/
+# change 2: view clip box
+cp /path/to/AIMBI/reference/FreeCAD/src/Mod/TechDraw/App/DrawViewPart.h src/Mod/TechDraw/App/
+cp /path/to/AIMBI/reference/FreeCAD/src/Mod/TechDraw/App/DrawViewPart.cpp src/Mod/TechDraw/App/
+cp /path/to/AIMBI/reference/FreeCAD/src/Mod/TechDraw/App/DrawViewSection.cpp src/Mod/TechDraw/App/
+cp /path/to/AIMBI/reference/FreeCAD/src/Mod/TechDraw/Gui/QGIViewPart.h src/Mod/TechDraw/Gui/
+cp /path/to/AIMBI/reference/FreeCAD/src/Mod/TechDraw/Gui/QGIViewPart.cpp src/Mod/TechDraw/Gui/
 ```
 
 Or create a git patch:
@@ -159,6 +235,12 @@ cmake -B build -S . -DFREECAD_LIBPACK_DIR=C:\path\to\LibPack
 
 # Build
 cmake --build build --config Release
+
+# Rebuilding one workbench after a change (VS 2022 generator; cmake is
+# the one bundled with Visual Studio if none is on PATH):
+"C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" \
+    --build build --config Release --target TechDraw --target TechDrawGui -- -m:8 -v:m
+# ~10 minutes for TechDraw + TechDrawGui; FreeCAD must not be running (the .pyd is locked)
 
 # The built FreeCAD will be in build/bin/
 ```

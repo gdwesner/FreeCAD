@@ -389,7 +389,8 @@ TopoDS_Shape DrawViewSection::getShapeToCut()
         Base::Console().message("DVS::getShapeToCut - base is weird\n");
         return {};
     }
-    return shapeToCut;
+    // AIMBI: a section clips what it cuts with its own box
+    return clipShape(shapeToCut);
 }
 
 TopoDS_Shape DrawViewSection::getShapeForDetail() const
@@ -576,6 +577,9 @@ TopoDS_Shape DrawViewSection::prepareShape(const TopoDS_Shape& uncenteredCutShap
         gp_Pnt inputCenter;
         inputCenter = ShapeUtils::findCentroid(uncenteredCutShape, m_projectionCS);
         Base::Vector3d centroid(inputCenter.X(), inputCenter.Y(), inputCenter.Z());
+        if (isClipped()) {
+            centroid = ClipCenter.getValue();   // AIMBI: anchor on the clip box
+        }
 
         m_cutShapeRaw = uncenteredCutShape;
         preparedShape = ShapeUtils::moveShape(uncenteredCutShape, centroid * -1.0);

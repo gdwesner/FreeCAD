@@ -50,6 +50,7 @@
 #include "QGICMark.h"
 #include "QGICenterLine.h"
 #include "QGIEdge.h"
+#include "QGCustomRect.h"
 #include "QGIFace.h"
 #include "QGIHighlight.h"
 #include "QGIMatting.h"
@@ -87,6 +88,20 @@ QGIViewPart::QGIViewPart()
     showSection = false;
     m_pathBuilder = new PathBuilder(this);
     m_dashedLineGenerator = new LineGenerator();
+
+    // AIMBI: clip box outline. A plain rect item, so removePrimitives and
+    // removeDecorations leave it alone; drawClipFrame sizes and shows it.
+    m_clipFrame = new QGCustomRect();
+    addToGroup(m_clipFrame);
+    m_clipFrame->setPos(0.0, 0.0);
+    QPen framePen(QColor(0, 140, 160));
+    framePen.setStyle(Qt::DashLine);
+    framePen.setCosmetic(true);
+    framePen.setWidth(1);
+    m_clipFrame->setPen(framePen);
+    m_clipFrame->setBrush(Qt::NoBrush);
+    m_clipFrame->setZValue(ZVALUE::SECTIONLINE);
+    m_clipFrame->hide();
 }
 
 QGIViewPart::~QGIViewPart()
@@ -262,6 +277,7 @@ void QGIViewPart::draw()
         return;
 
     drawViewPart();
+    drawClipFrame();
     drawAllHighlights();
     drawBreakLines();
     drawMatting();
@@ -299,6 +315,35 @@ void QGIViewPart::drawViewPart()
     drawAllEdges();
 
     drawAllVertexes();
+}
+
+// AIMBI: the clip box drawn at the view's origin (the view is centred on
+// ClipCenter while clipped). An unbounded extent follows the geometry.
+// Hidden while exporting, like the view frame.
+void QGIViewPart::drawClipFrame()
+{
+    auto viewPart(dynamic_cast<TechDraw::DrawViewPart*>(getViewObject()));
+    if (!viewPart || !m_clipFrame) {
+        return;
+    }
+    m_clipFrame->hide();
+    if (!viewPart->isClipped() || !viewPart->ShowClipFrame.getValue() || isExporting()) {
+        return;
+    }
+    QRectF geom = childrenBoundingRect();
+    double scale = viewPart->getScale();
+    double w = viewPart->ClipWidth.getValue() * scale;
+    double h = viewPart->ClipHeight.getValue() * scale;
+    double left = w > 0.0 ? -Rez::guiX(w) / 2.0 : geom.left();
+    double right = w > 0.0 ? Rez::guiX(w) / 2.0 : geom.right();
+    double top = h > 0.0 ? -Rez::guiX(h) / 2.0 : geom.top();
+    double bottom = h > 0.0 ? Rez::guiX(h) / 2.0 : geom.bottom();
+    if (right - left <= 0.0 || bottom - top <= 0.0) {
+        return;
+    }
+    m_clipFrame->setRect(QRectF(left, top, right - left, bottom - top));
+    m_clipFrame->setPos(0.0, 0.0);
+    m_clipFrame->show();
 }
 
 void QGIViewPart::drawAllFaces(void)

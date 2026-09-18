@@ -55,6 +55,7 @@ namespace TechDrawGui
 class QGIFace;
 class QGIEdge;
 class QGIHighlight;
+class QGCustomRect;
 class PathBuilder;
 
 class TechDrawGuiExport QGIViewPart : public QGIView
@@ -134,6 +135,7 @@ public:
 
 protected:
     bool sceneEventFilter(QGraphicsItem *watched, QEvent *event) override;
+    void drawClipFrame();     // AIMBI: the clip box outline, screen only
     QPainterPath drawPainterPath(TechDraw::BaseGeomPtr baseGeom) const;
     void drawViewPart();
     QGIFace* drawFace(TechDraw::FacePtr f, int idx);
@@ -158,6 +160,7 @@ protected:
 
 private:
     QList<QGraphicsItem*> deleteItems;
+    QGCustomRect* m_clipFrame{nullptr};   // AIMBI
     PathBuilder* m_pathBuilder;
     TechDraw::LineGenerator* m_dashedLineGenerator;
     QMetaObject::Connection m_selectionChangedConnection;

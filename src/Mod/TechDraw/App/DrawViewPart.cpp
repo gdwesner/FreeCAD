@@ -46,6 +46,13 @@
 #include <BRep_Tool.hxx>
 #include <Bnd_Box.hxx>
 #include <HLRAlgo_Projector.hxx>
+#include <BRepBndLib.hxx>
+#include <BRepPrimAPI_MakeBox.hxx>
+#include <BRep_Builder.hxx>
+#include <Bnd_Box.hxx>
+#include <TopoDS_Compound.hxx>
+#include <TopoDS_Iterator.hxx>
+#include <Mod/Part/App/FCBRepAlgoAPI_Common.h>
 #include <QtConcurrentRun>
 #include <ShapeAnalysis.hxx>
 #include <TopExp.hxx>
@@ -60,6 +67,7 @@
 #include <gp_Dir.hxx>
 #include <gp_Pln.hxx>
 #include <gp_Pnt.hxx>
+#include <algorithm>
 #include <sstream>
 
 
@@ -145,6 +153,21 @@ DrawViewPart::DrawViewPart()
     ADD_PROPERTY_TYPE(IsoCount, (Preferences::getPreferenceGroup("HLR")->GetBool("IsoCount", 0)),
         sgroup, App::Prop_None, "Number of iso parameters lines");
 
+    // AIMBI clip box
+    static const char* cgroup = "Clip";
+    ADD_PROPERTY_TYPE(ClipEnabled, (false), cgroup, App::Prop_None,
+                      "AIMBI: draw only what lies inside the clip box");
+    ADD_PROPERTY_TYPE(ClipCenter, (0.0, 0.0, 0.0), cgroup, App::Prop_None,
+                      "AIMBI: centre of the clip box in model space; the view is centred on it");
+    ADD_PROPERTY_TYPE(ClipWidth, (0.0), cgroup, App::Prop_None,
+                      "AIMBI: box extent along XDirection (0 = unbounded)");
+    ADD_PROPERTY_TYPE(ClipHeight, (0.0), cgroup, App::Prop_None,
+                      "AIMBI: box extent along the view's up axis (0 = unbounded)");
+    ADD_PROPERTY_TYPE(ClipDepth, (0.0), cgroup, App::Prop_None,
+                      "AIMBI: box extent along Direction, centred on ClipCenter (0 = unbounded)");
+    ADD_PROPERTY_TYPE(ShowClipFrame, (true), cgroup, App::Prop_None,
+                      "AIMBI: draw the clip box outline on the page (never exported)");
+
     ADD_PROPERTY_TYPE(ScrubCount, (Preferences::scrubCount()), sgroup, App::Prop_None,
                       "The number of times FreeCAD should try to clean the HLR result.");
 
@@ -176,10 +199,137 @@ TopoDS_Shape DrawViewPart::getSourceShape(bool fuse, bool allow2d) const
         return {};
     }
     if (fuse) {
-        return ShapeExtractor::getShapesFused(links);
+        return clipShape(ShapeExtractor::getShapesFused(links));
     }
-    return ShapeExtractor::getShapes(links, allow2d);
+    return clipShape(ShapeExtractor::getShapes(links, allow2d));
 }
+
+// AIMBI ---------------------------------------------------------------------
+bool DrawViewPart::isClipped() const
+{
+    if (!ClipEnabled.getValue()) {
+        return false;
+    }
+    return ClipWidth.getValue() > 0.0 || ClipHeight.getValue() > 0.0
+        || ClipDepth.getValue() > 0.0;
+}
+
+//! Intersect shape with the clip box. Each top-level piece of a compound is
+//! classified against the box by its bounding box first: pieces wholly
+//! inside pass untouched, pieces wholly outside are dropped, only pieces
+//! crossing a face pay for a boolean common. Returns a null shape when
+//! nothing survives.
+TopoDS_Shape DrawViewPart::clipShape(const TopoDS_Shape& shape) const
+{
+    if (shape.IsNull() || !isClipped()) {
+        return shape;
+    }
+    constexpr double unbounded = 1.0e7;   // 10 km: past any building
+    const double w = ClipWidth.getValue() > 0.0 ? ClipWidth.getValue() : unbounded;
+    const double h = ClipHeight.getValue() > 0.0 ? ClipHeight.getValue() : unbounded;
+    const double d = ClipDepth.getValue() > 0.0 ? ClipDepth.getValue() : unbounded;
+
+    gp_Ax2 cs = getProjectionCS();
+    const gp_Dir xDir = cs.XDirection();
+    const gp_Dir yDir = cs.YDirection();
+    const gp_Dir zDir = cs.Direction();
+    const Base::Vector3d c = ClipCenter.getValue();
+    const gp_Pnt centre(c.x, c.y, c.z);
+
+    TopoDS_Shape box;
+    try {
+        gp_Pnt corner = centre.Translated(gp_Vec(xDir) * (-w / 2.0))
+                              .Translated(gp_Vec(yDir) * (-h / 2.0))
+                              .Translated(gp_Vec(zDir) * (-d / 2.0));
+        box = BRepPrimAPI_MakeBox(gp_Ax2(corner, zDir, xDir), w, h, d).Shape();
+    }
+    catch (Standard_Failure&) {
+        Base::Console().warning("DVP::clipShape - %s - could not make the clip box\n",
+                                getNameInDocument());
+        return shape;
+    }
+
+    const double lo[3] = {-w / 2.0, -h / 2.0, -d / 2.0};
+    const double hi[3] = {w / 2.0, h / 2.0, d / 2.0};
+    const gp_Dir axes[3] = {xDir, yDir, zDir};
+
+    // 1: wholly inside, -1: wholly outside, 0: crossing
+    auto classify = [&](const TopoDS_Shape& piece) -> int {
+        Bnd_Box bb;
+        BRepBndLib::Add(piece, bb);
+        if (bb.IsVoid()) {
+            return -1;
+        }
+        double xmin, ymin, zmin, xmax, ymax, zmax;
+        bb.Get(xmin, ymin, zmin, xmax, ymax, zmax);
+        bool inside = true;
+        for (int a = 0; a < 3; ++a) {
+            double pmin = 1.0e300, pmax = -1.0e300;
+            for (int k = 0; k < 8; ++k) {
+                gp_Vec rel(((k & 1) ? xmax : xmin) - centre.X(),
+                           ((k & 2) ? ymax : ymin) - centre.Y(),
+                           ((k & 4) ? zmax : zmin) - centre.Z());
+                double p = rel.Dot(gp_Vec(axes[a]));
+                pmin = std::min(pmin, p);
+                pmax = std::max(pmax, p);
+            }
+            if (pmax < lo[a] || pmin > hi[a]) {
+                return -1;
+            }
+            if (pmin < lo[a] || pmax > hi[a]) {
+                inside = false;
+            }
+        }
+        return inside ? 1 : 0;
+    };
+
+    BRep_Builder builder;
+    TopoDS_Compound result;
+    builder.MakeCompound(result);
+    int kept = 0;
+    auto addPiece = [&](const TopoDS_Shape& piece) {
+        int cls = classify(piece);
+        if (cls < 0) {
+            return;
+        }
+        if (cls > 0) {
+            builder.Add(result, piece);
+            ++kept;
+            return;
+        }
+        try {
+            FCBRepAlgoAPI_Common common(piece, box);
+            if (common.IsDone()) {
+                TopoDS_Shape cut = common.Shape();
+                TopExp_Explorer probe(cut, TopAbs_VERTEX);
+                if (!cut.IsNull() && probe.More()) {
+                    builder.Add(result, cut);
+                    ++kept;
+                }
+                return;
+            }
+        }
+        catch (Standard_Failure&) {
+            // fall through: keep the piece uncut rather than lose it
+        }
+        builder.Add(result, piece);
+        ++kept;
+    };
+
+    if (shape.ShapeType() == TopAbs_COMPOUND) {
+        for (TopoDS_Iterator it(shape); it.More(); it.Next()) {
+            addPiece(it.Value());
+        }
+    }
+    else {
+        addPiece(shape);
+    }
+    if (kept == 0) {
+        return {};
+    }
+    return result;
+}
+// ---------------------------------------------------------------------------
 
 //! deliver a shape appropriate for making a detail view based on this view
 //! TODO: why does dvp do the thinking for detail, but section picks its own
@@ -265,6 +415,8 @@ short DrawViewPart::mustExecute() const
         || SmoothVisible.isTouched() || SeamVisible.isTouched() || IsoVisible.isTouched()
         || HardHidden.isTouched() || SmoothHidden.isTouched() || SeamHidden.isTouched()
         || IsoHidden.isTouched() || IsoCount.isTouched() || CoarseView.isTouched()
+        || ClipEnabled.isTouched() || ClipCenter.isTouched() || ClipWidth.isTouched()
+        || ClipHeight.isTouched() || ClipDepth.isTouched()
         || CosmeticVertexes.isTouched() || CosmeticEdges.isTouched() || CenterLines.isTouched()) {
         return 1;
     }
@@ -285,6 +437,9 @@ void DrawViewPart::onChanged(const App::Property* prop)
     if (DrawUtil::fpCompare(xdir.Length(), 0.0)) {
         Base::Console().warning("%s XDirection is null. Using (1, 0, 0).\n", Label.getValue());
         XDirection.setValue(Base::Vector3d(1.0, 0.0, 0.0));
+    }
+    if (prop == &ShowClipFrame && !isRestoring()) {
+        requestPaint();   // AIMBI: the frame is drawn by the GUI item, no geometry changes
     }
 
     DrawView::onChanged(prop);
@@ -319,6 +474,10 @@ GeometryObjectPtr DrawViewPart::makeGeometryForShape(const TopoDS_Shape& shape)
 
     gp_Pnt gCentroid = ShapeUtils::findCentroid(localShape, getProjectionCS());
     m_saveCentroid = Base::convertTo<Base::Vector3d>(gCentroid);
+    if (isClipped()) {
+        // AIMBI: anchor the view on the clip box, not on what happens to be in it
+        m_saveCentroid = ClipCenter.getValue();
+    }
     m_saveShape = centerScaleRotate(this, localShape, m_saveCentroid);
 
     return buildGeometryObject(localShape, getProjectionCS());
